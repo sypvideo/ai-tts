@@ -1,0 +1,128 @@
+@import "tailwindcss";
+
+:root {
+  /* 基础背景色：浅灰底，增加高级感 */
+  --background: #F5F5F7; 
+  --foreground: #262626;
+  
+  /* 品牌色变量定义 */
+  --brand-purple: #9C27B0;
+  --brand-dark: #262626;
+  --brand-panel: #F9F9FB;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--brand-purple);
+  --color-dark: var(--brand-dark);
+  --color-panel: var(--brand-panel);
+  
+  /* 注入大圆角规范 */
+  --radius-card: 40px;
+  --radius-button: 28px;
+}
+
+/* --- 基础样式 --- */
+body {
+  background: var(--background);
+  color: var(--foreground);
+  /* 优化字体族，保留 Arial 的同时也兼容现代系统字体 */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-weight: 500;
+}
+
+@layer components {
+  /* --- 1. 拟态 & 交互样式 --- */
+  
+  /* 情感标签按钮 */
+  .emotion-btn {
+    @apply bg-gradient-to-br from-white to-[#F9F9FB] border border-[#F0F0F0] 
+           shadow-[4px_4px_12px_rgba(0,0,0,0.03)] transition-all duration-300 
+           hover:-translate-y-0.5 hover:border-primary hover:text-primary 
+           active:scale-95 active:shadow-[inset_2px_2px_5px_rgba(0,0,0,0.05)];
+  }
+
+  /* 音色卡片 */
+  .voice-card {
+    @apply transition-all duration-300;
+  }
+  .voice-card.active {
+    @apply border-primary bg-white shadow-[0_10px_30px_-10px_rgba(156,39,176,0.15)];
+  }
+
+  /* 按钮点击时的物理下陷感 */
+  .btn-active-push:active {
+    transform: scale(0.98);
+    box-shadow: 
+      inset 4px 4px 8px #d1d9e6,
+      inset -4px -4px 8px #ffffff;
+  }
+
+  /* --- 2. 优化后的滚动条 (已整合去重) --- */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px; /* 极细宽度 */
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    /* 默认状态：极其低调 */
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 10px;
+    transition: all 0.3s ease;
+  }
+  .custom-scrollbar:hover::-webkit-scrollbar-thumb {
+    /* 悬浮在音色库区域时：显示浅紫色 */
+    background: rgba(156, 39, 176, 0.2);
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    /* 直接抓取滚动条时：变为品牌深紫色 */
+    background: var(--brand-purple);
+  }
+
+  /* --- 3. 物理拟态阴影规范 --- */
+  .shadow-physical {
+    box-shadow: 20px 20px 60px #d9dadb, -20px -20px 60px #ffffff;
+  }
+
+  .shadow-inner-physical {
+    box-shadow: inset 3px 3px 6px rgba(0,0,0,0.06), 
+                inset -3px -3px 8px rgba(255,255,255,0.8);
+  }
+
+  /* --- 4. 动画集锦 --- */
+  
+  /* 声波脉冲动画 (预览播放) */
+  @keyframes sound-wave-rise {
+    0%, 100% { height: 4px; transform: translateY(0); opacity: 0.6; }
+    50% { height: 16px; transform: translateY(-2px); opacity: 1; }
+  }
+  .animate-wave-1 { animation: sound-wave-rise 0.6s ease-in-out infinite; }
+  .animate-wave-2 { animation: sound-wave-rise 0.6s ease-in-out 0.15s infinite; }
+  .animate-wave-3 { animation: sound-wave-rise 0.6s ease-in-out 0.3s infinite; }
+
+  /* 闪烁特效 (插入标签反馈) */
+  @keyframes flash-purple {
+    0% { border-color: transparent; box-shadow: 0 0 0 0 rgba(156, 39, 176, 0); }
+    50% { border-color: #9C27B0; box-shadow: 0 0 15px rgba(156, 39, 176, 0.2); }
+    100% { border-color: transparent; box-shadow: 0 0 0 0 rgba(156, 39, 176, 0); }
+  }
+  .border-flash { animation: flash-purple 0.4s ease-out; }
+
+  /* 加载呼吸 */
+  @keyframes pulse-opacity {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+  .loading-pulse { animation: pulse-opacity 1.5s infinite; }
+}
+
+/* --- 5. 媒体组件覆盖 --- */
+audio::-webkit-media-controls-enclosure,
+.custom-audio-element::-webkit-media-controls-panel {
+  background-color: var(--brand-panel);
+  border-radius: 20px;
+}

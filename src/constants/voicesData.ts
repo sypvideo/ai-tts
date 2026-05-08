@@ -1,4 +1,4 @@
-// constants/voicesData.ts
+// app/voices.ts
 
 export interface Voice {
   id: string;
@@ -11,6 +11,7 @@ export interface Voice {
   color: string;
 }
 
+// 你精选的 28 个音色列表
 export const DUBBING_VOICES: Voice[] = [
   { id: "zh_female_vv_uranus_bigtts", name: "Vivi 2.0", scene: "情感/ASMR", lang: "中文/多语", gender: "女", category: "zh", previewUrl: "/previews/vivi.mp3", color: "from-pink-400 to-rose-400" },
   { id: "zh_female_xiaohe_uranus_bigtts", name: "小何 2.0", scene: "通用场景", lang: "中文", gender: "女", category: "zh", previewUrl: "/previews/xiaohe.mp3", color: "from-fuchsia-400 to-purple-500" },
@@ -42,10 +43,12 @@ export const DUBBING_VOICES: Voice[] = [
   { id: "zh_male_ruyayichen_uranus_bigtts", name: "儒雅逸辰 2.0", scene: "视频配音", lang: "中文", gender: "男", category: "zh", previewUrl: "/previews/yichen.mp3", color: "from-blue-600 to-indigo-800" }
 ];
 
+// 这里的 Value 是发送给火山引擎/Azure API 的英文标识符
 export const EMOTION_EFFECTS: Record<string, string> = {
-  'happy': '高兴',
-  'sad': '悲伤',
-  'angry': '愤怒',
-  'surprise': '惊讶',
-  'fear': '恐惧'
+  happy: '高兴',
+  sad: '悲伤',
+  angry: '愤怒',
+  surprise: '惊讶',
+  fear: '恐惧'
 };
+
