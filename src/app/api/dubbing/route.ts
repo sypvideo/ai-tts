@@ -22,9 +22,11 @@ export async function POST(req: NextRequest) {
     const plainText = text.replace(/<[^>]*>/g, ''); 
     const charCount = plainText.length;
 
+    // 初始化数据库连接
     const sql = neon(dbUrl);
 
     // 3. 执行数据库扣费（原子操作）
+    // 修正点：确保使用标准的 sql 模板字符串，避免 Vercel 构建时的类型推断错误
     const updateResult = await sql`
       UPDATE users 
       SET credits = credits - ${charCount}, 
@@ -61,27 +63,30 @@ export async function POST(req: NextRequest) {
     });
 
     if (!response.ok) {
-      // 如果火山引擎报错，理论上应该返还积分（此处为简化逻辑，建议后续增加冲正逻辑）
-      const errorText = await response.text();
+      // 容错逻辑：如果火山引擎报错，建议在实际生产中增加积分返还逻辑
       return NextResponse.json({ error: "语音合成引擎响应异常" }, { status: response.status });
     }
 
-    // 5. 异步保存历史记录（不阻塞音频流）
+    // 5. 异步保存历史记录（使用 .catch 避免阻塞主音频流）
     sql`
       INSERT INTO records (user_id, content, voice_id, char_count)
       VALUES (${userId}, ${plainText.substring(0, 200)}, ${voiceId}, ${charCount})
     `.catch(err => console.error("记录保存失败:", err));
 
-    // 6. 核心流式传输：Base64 实时转二进制
+    // 6. 核心流式传输处理
     const reader = response.body?.getReader();
     const decoder = new TextDecoder();
+
+    if (!reader) {
+      throw new Error("无法读取语音引擎响应流");
+    }
 
     const stream = new ReadableStream({
       async start(controller) {
         let buffer = "";
         try {
           while (true) {
-            const { done, value } = await reader!.read();
+            const { done, value } = await reader.read();
             if (done) break;
 
             buffer += decoder.decode(value, { stream: true });
@@ -101,7 +106,7 @@ export async function POST(req: NextRequest) {
                   controller.enqueue(bytes);
                 }
               } catch (e) {
-                // 忽略非 JSON 行
+                // 忽略非标准 JSON 行
               }
             }
           }
@@ -121,6 +126,6 @@ export async function POST(req: NextRequest) {
 
   } catch (error: any) {
     console.error("API Route 内部错误:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message || "未知服务器错误" }, { status: 500 });
   }
 }
