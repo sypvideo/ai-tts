@@ -15,18 +15,22 @@ export default function ControlPanel({ text, selectedVoice, audioUrl, setAudioUr
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  // 定义动态输入上限
+  // 定义动态输入上限：游客 300 字，登录用户 1500 字
   const maxInputLength = user ? 1500 : 300; 
 
   // 计算当前文本消耗
-  const plainText = text.replace(/<[^>]*>/g, '').replace(/\[#(\w+)\]/g, '').replace(/\[\/#\1\]/g, '');
+  // 修正点：将正则改为一次性过滤 [#tag] 和 [/#tag]，解决反向引用未定义的报错
+  const plainText = text
+    .replace(/<[^>]*>/g, '') // 过滤 HTML/SSML 标签
+    .replace(/\[\/?#\w+\]/g, ''); // 过滤 [#tag] 和 [/#tag]
+  
   const charCount = plainText.length;
   const currentCredits = user?.credits ?? 0;
   
   const isOutOfCredits = user && charCount > currentCredits;
   const isOverLimit = charCount > maxInputLength;
   
-  // 只要任意一个条件不满足，就禁用生成
+  // 校验逻辑
   const canGenerate = text.trim() && !isOutOfCredits && !isOverLimit;
 
   const handleGenerate = async () => {
@@ -41,8 +45,9 @@ export default function ControlPanel({ text, selectedVoice, audioUrl, setAudioUr
 
     try {
       let finalSsml = text.trim();
+      
+      // 处理自定义短剧标签，转换为标准 SSML
       const hasTags = /\[#(\w+)\]/.test(finalSsml);
-
       if (hasTags) {
         finalSsml = finalSsml.replace(/\[#(\w+)\]([\s\S]*?)\[\/#\1\]/g, (match, tag, content) => {
           return `<speak effect="${tag}">${content}</speak>`;
@@ -92,6 +97,7 @@ export default function ControlPanel({ text, selectedVoice, audioUrl, setAudioUr
       const url = URL.createObjectURL(blob);
       setAudioUrl(url);
 
+      // 通知导航栏更新余额
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('balanceUpdated'));
       }
@@ -109,7 +115,7 @@ export default function ControlPanel({ text, selectedVoice, audioUrl, setAudioUr
   return (
     <div className="mt-auto flex flex-col items-center px-4 md:px-10 pb-6">
       
-      {/* 1. 播放器与状态区域（移除了原有的字数统计和余额展示） */}
+      {/* 播放器与状态区域 */}
       <div className="h-[80px] w-full max-w-[600px] mb-8 flex items-center justify-center">
         {audioUrl ? (
           <div className="w-full bg-[#F9F9FB] border border-white rounded-[24px] p-4 flex items-center gap-4 animate-in fade-in slide-in-from-bottom-2 duration-500 shadow-xl">
@@ -150,7 +156,7 @@ export default function ControlPanel({ text, selectedVoice, audioUrl, setAudioUr
         )}
       </div>
 
-      {/* 2. 生成按钮 */}
+      {/* 生成按钮 */}
       <button 
         onClick={handleGenerate} 
         disabled={loading || !canGenerate} 
