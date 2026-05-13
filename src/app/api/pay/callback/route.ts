@@ -1,43 +1,46 @@
 import { neon } from '@neondatabase/serverless';
 
 export async function POST(req: Request) {
-  const sql = neon(process.env.DATABASE_URL!);
+  const dbUrl = process.env.DATABASE_URL;
   
-  // 1. 获取支付平台发来的参数（不同平台参数名不同，通常有 pid, out_trade_no, sign 等）
-  const data = await req.json(); 
+  if (!dbUrl) {
+    console.error("数据库连接字符串缺失");
+    return new Response("server_config_error", { status: 500 });
+  }
 
-  // --- 这里必须有一步：验证签名 (验证这封信确实是支付平台发的) ---
-
-  const { orderId, tradeNo, userId, creditsToAdd } = data;
-
+  const sql = neon(dbUrl);
+  
   try {
-    // 2. 检查订单是否已经是成功状态，防止重复加钱
+    // 1. 获取支付平台参数
+    const data = await req.json(); 
+    const { orderId, tradeNo, userId, creditsToAdd } = data;
+
+    // --- 注意：此处后续应添加签名验证逻辑 ---
+
+    // 2. 检查订单是否已经是成功状态，防止重复充值
     const order = await sql`SELECT status FROM orders WHERE id = ${orderId}`;
     if (order[0]?.status === 'succeeded') {
         return new Response("already_processed");
     }
 
     // 3. 执行“加钱”动作：更新订单状态 + 增加用户余额
-    // 使用原生 SQL 确保原子性
-    await sql.transaction(async (tx) => {
-      // 更新订单
-      await tx`
+    // 修正点：使用数组模式替代 async 回调，解决 TypeScript 类型错误
+    await sql.transaction([
+      sql`
         UPDATE orders 
         SET status = 'succeeded', trade_no = ${tradeNo} 
         WHERE id = ${orderId}
-      `;
-
-      // 给用户增加余额
-      await tx`
+      `,
+      sql`
         UPDATE users 
         SET credits = credits + ${creditsToAdd} 
         WHERE id = ${userId}
-      `;
-    });
+      `
+    ]);
 
-    return new Response("success"); // 必须返回支付平台要求的成功标识
-  } catch (error) {
+    return new Response("success"); 
+  } catch (error: any) {
     console.error("支付回调处理失败:", error);
-    return new Response("error", { status: 500 });
+    return new Response(error.message || "error", { status: 500 });
   }
 }
