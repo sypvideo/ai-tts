@@ -1,17 +1,56 @@
 "use client";
 
-import React from 'react';
-import { usePathname } from 'next/navigation';
+import React, { useEffect, useState, useCallback } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-
+// 导入获取用户信息和登出的 Action
+import { getUserProfile, logout } from '@/app/login/actions';
 
 export default function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [user, setUser] = useState<{ name?: string; email: string; credits?: number; role?: string } | null>(null);
 
+  // 封装获取用户信息的逻辑
+  const fetchUser = useCallback(async () => {
+    const userData = await getUserProfile();
+    if (userData) {
+      setUser(userData as any);
+    }
+  }, []);
+
+  // 页面加载逻辑与事件监听
+  useEffect(() => {
+    fetchUser();
+
+    const handleBalanceUpdate = () => {
+      console.log("检测到余额变动，正在同步导航栏...");
+      fetchUser();
+    };
+
+    window.addEventListener('balanceUpdated', handleBalanceUpdate);
+    const timer = setInterval(fetchUser, 60000); 
+
+    return () => {
+      window.removeEventListener('balanceUpdated', handleBalanceUpdate);
+      clearInterval(timer);
+    };
+  }, [fetchUser]);
+
+  const handleLogout = async () => {
+    if (confirm("确定要退出登录吗？")) {
+      await logout();
+      setUser(null);
+      window.location.reload(); 
+    }
+  };
+
+  // --- 重新核对的菜单项：包含所有功能 ---
   const menuItems = [
     { name: '文字转语音', path: '/', emoji: '🎙️' },
-    { name: '声音复刻', path: '/clone', emoji: '🧬', disabled: true },
+    { name: '声音复刻', path: '/clone', emoji: '🧬', disabled: true }, 
     { name: '更新日志', path: '/changelog', emoji: '🚀' },
+    { name: '定价模式', path: '/pricing', emoji: '💎' },
   ];
 
   return (
@@ -32,74 +71,104 @@ export default function Navbar() {
         </div>
       </Link>
 
-      {/* 中间：导航菜单 (同步 EditorArea 胶囊风格) */}
-      <div className="hidden md:flex items-center bg-[#F5F5F7] p-2 rounded-full border border-gray-100/50 shadow-inner overflow-hidden">
+      {/* 中间：导航菜单 */}
+      <div className="hidden lg:flex items-center bg-[#F5F5F7] p-1.5 rounded-full border border-gray-100/50 shadow-inner overflow-hidden">
         {menuItems.map((item) => {
           const isActive = pathname === item.path;
-          
           const content = (
-            <div 
-              className={`
-                px-6 py-2.5 rounded-full text-[13px] font-bold flex items-center gap-2 transition-all duration-300 relative group
-                ${isActive 
-                  ? 'bg-white text-[#9C27B0] shadow-[0_4px_12px_rgba(156,39,176,0.1)] border-[#F0F0F0] scale-[1.02]' 
-                  : 'text-gray-500 hover:text-gray-800 hover:bg-white/60 border-transparent'}
-                ${item.disabled ? 'opacity-40 grayscale cursor-not-allowed' : 'cursor-pointer active:scale-95'}
-                border
-              `}
-              style={{
-                background: isActive ? 'linear-gradient(145deg, #ffffff, #f9f9fb)' : 'transparent'
-              }}
-            >
+            <div className={`
+              px-5 py-2 rounded-full text-[13px] font-bold flex items-center gap-2 transition-all duration-300 relative group
+              ${isActive 
+                ? 'bg-white text-[#9C27B0] shadow-[0_4px_12px_rgba(156,39,176,0.1)] border-[#F0F0F0] scale-[1.02]' 
+                : 'text-gray-500 hover:text-gray-800 hover:bg-white/60 border-transparent'}
+              ${item.disabled ? 'opacity-40 grayscale cursor-not-allowed' : 'cursor-pointer active:scale-95'}
+              border
+            `} style={{ background: isActive ? 'linear-gradient(145deg, #ffffff, #f9f9fb)' : 'transparent' }}>
               <span className={`text-base transition-transform duration-300 ${isActive ? 'scale-110' : 'group-hover:scale-110 opacity-70'}`}>
                 {item.emoji}
               </span>
               {item.name}
-
-              {/* 禁用态微型 Tip */}
-              {item.disabled && (
-                <span className="absolute -top-1 -right-2 bg-gray-200 text-[8px] px-1 rounded text-gray-500 scale-75 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                  开发中
-                </span>
-              )}
-
-              {/* 选中态底部高光 */}
-              {isActive && (
-                <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-[#9C27B0] rounded-full" />
-              )}
             </div>
           );
 
           return item.disabled ? (
             <div key={item.name} className="mx-0.5">{content}</div>
           ) : (
-            <Link href={item.path} key={item.name} className="mx-0.5">
-              {content}
-            </Link>
+            <Link href={item.path} key={item.name} className="mx-0.5">{content}</Link>
           );
         })}
       </div>
 
-      {/* 右侧：个人中心 */}
-      <div className="flex items-center gap-4">
-        <div className="hidden sm:flex flex-col items-end">
-          <span className="text-xs font-bold text-gray-800 tracking-wide">商业授权用户</span>
-          <div className="flex items-center gap-1.5">
-            <div className="w-1.5 h-1.5 bg-[#9C27B0] rounded-full animate-pulse" />
-            <span className="text-[10px] text-gray-400 font-medium tracking-wider">权益已激活</span>
-          </div>
-        </div>
-        
-        <div className="group relative">
-          <div className="w-11 h-11 rounded-full border-2 border-white shadow-physical bg-gray-100 p-0.5 cursor-pointer active:scale-95 transition-all overflow-hidden">
-            <div className="w-full h-full rounded-full bg-gradient-to-tr from-purple-50 to-white flex items-center justify-center text-gray-300 group-hover:text-[#9C27B0] transition-colors">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
+      {/* 右侧：用户信息与操作区 */}
+      <div className="flex items-center gap-3">
+        {user ? (
+          <div className="flex items-center bg-white/50 p-1.5 pr-3 rounded-full border border-white/60 shadow-sm group/user">
+            
+            {/* 余额显示胶囊 */}
+            <div 
+              onClick={() => router.push('/pricing')}
+              className="flex items-center bg-[#F5F5F7] rounded-full px-4 py-2 border border-gray-100 shadow-inner gap-3 mr-1 group/credit cursor-pointer hover:bg-white hover:shadow-md transition-all active:scale-95"
+            >
+               <div className="flex flex-col">
+                  <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter leading-none group-hover/credit:text-[#9C27B0]">剩余额度</span>
+                  <div className="flex items-baseline gap-0.5">
+                    <span className="text-sm font-black text-gray-800 tracking-tight">
+                      {user.credits?.toLocaleString() ?? 0}
+                    </span>
+                    <span className="text-[9px] font-bold text-gray-400">字符</span>
+                  </div>
+               </div>
+               <div className="w-5 h-5 bg-[#9C27B0]/10 rounded-full flex items-center justify-center text-[#9C27B0] group-hover/credit:bg-[#9C27B0] group-hover/credit:text-white transition-all shadow-sm">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+               </div>
             </div>
+
+            {/* 用户身份展示 */}
+            <div className="flex items-center gap-3 px-2">
+              <div className="hidden sm:flex flex-col items-end">
+                <span className="text-[11px] font-bold text-gray-800 leading-tight">
+                  {user.name || '核心创作者'}
+                </span>
+                <span className="text-[9px] text-[#9C27B0] font-black uppercase tracking-wider italic opacity-70">
+                  {user.role === 'member' ? 'Pro Member' : 'Standard'}
+                </span>
+              </div>
+              <div className="w-9 h-9 rounded-full border-2 border-white shadow-md bg-gradient-to-tr from-[#9C27B0] to-purple-400 flex items-center justify-center text-white text-xs font-black">
+                {(user.name || user.email).charAt(0).toUpperCase()}
+              </div>
+            </div>
+
+            <div className="w-[1px] h-6 bg-gray-200 mx-1" />
+
+            <button 
+              onClick={handleLogout}
+              className="w-9 h-9 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all active:scale-90 group/btn"
+              title="退出登录"
+            >
+              <svg className="w-5 h-5 transform group-hover/btn:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+            </button>
           </div>
-        </div>
+        ) : (
+          <Link href="/login" className="flex items-center gap-4 bg-white/50 p-1.5 pr-2 rounded-full border border-white/60 shadow-sm hover:shadow-md transition-all group">
+             <span className="ml-4 text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] group-hover:text-[#9C27B0] transition-colors">登录探索更多</span>
+             <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-300 group-hover:bg-[#9C27B0] group-hover:text-white transition-all shadow-inner">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+             </div>
+          </Link>
+        )}
       </div>
+
+      <style jsx>{`
+        .shadow-physical {
+          box-shadow: 4px 4px 8px #bebebe, -4px -4px 8px #ffffff;
+        }
+      `}</style>
     </nav>
   );
 }
