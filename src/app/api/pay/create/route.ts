@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 套餐配置
-    let creditsToMin = 20000;
+    let creditsToMin = 2000;
     let planName = '基础包';
 
     if (planId === 'std') {
