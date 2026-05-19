@@ -1,16 +1,16 @@
 'use client';
+
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { useRouter } from 'next/navigation'; // 1. 引入官方路由控制
 import { handleAuth, sendVerificationCode } from './actions'; 
-// 引入 Auth.js 提供的客户端方法
-import { signIn } from "next-auth/react";
 
 export default function AuthPage() {
+  const router = useRouter(); // 2. 初始化路由实例
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
-  const [socialLoading, setSocialLoading] = useState<string | null>(null); // 社交登录状态
   const [countdown, setCountdown] = useState(0); 
   const [message, setMessage] = useState({ type: '', content: '' });
 
@@ -46,18 +46,6 @@ export default function AuthPage() {
     }
   };
 
-  // 社交登录处理函数
-  const handleSocialSignIn = async (provider: 'github' | 'google') => {
-    setSocialLoading(provider);
-    try {
-      // callbackUrl 确保登录后跳转回主页
-      await signIn(provider, { callbackUrl: '/' });
-    } catch (error) {
-      setMessage({ type: 'error', content: '社交登录启动失败' });
-      setSocialLoading(null);
-    }
-  };
-
   // 邮箱登录/注册提交
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,8 +64,16 @@ export default function AuthPage() {
       if (result.error) {
         setMessage({ type: 'error', content: result.error });
       } else {
-        setMessage({ type: 'success', content: '登录成功！正在进入系统...' });
-        setTimeout(() => { window.location.href = '/'; }, 1000);
+        setMessage({ type: 'success', content: '登录成功！正在同步进入系统...' });
+        
+        // 核心修正（双保险组合拳）：
+        // 步骤一：强行向 Next.js 发出指令，彻底擦除浏览器侧的页面数据缓存
+        router.refresh(); 
+
+        // 步骤二：稍微等 100 毫秒缓存擦除生效后，执行底层硬跳转
+        setTimeout(() => {
+          window.location.replace('/'); // 使用 replace 代替 href，不仅强刷页面，还不留登录页的后退历史
+        }, 100);
       }
     } catch (error) {
       setMessage({ type: 'error', content: '系统遇到意外，请稍后再试' });
@@ -105,7 +101,7 @@ export default function AuthPage() {
             </p>
           </div>
 
-          {/* 原有邮箱登录表单 */}
+          {/* 邮箱登录表单 */}
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="flex flex-col gap-2">
               <label className="text-[10px] font-black text-gray-400 ml-4 tracking-widest">电子邮箱地址</label>
@@ -125,7 +121,6 @@ export default function AuthPage() {
                 <input
                   type="text"
                   required
-                  maxLength={6}
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
                   placeholder="6位数字验证码"
@@ -162,42 +157,6 @@ export default function AuthPage() {
               {loading ? '正在验证...' : '立即登录 / 注册'}
             </motion.button>
           </form>
-
-          {/* 新增社交登录区域 */}
-          <div className="mt-10 space-y-6">
-            <div className="relative flex items-center justify-center">
-              <div className="w-full border-t border-gray-200"></div>
-              <span className="bg-[#F0F2F5] px-4 text-[10px] text-gray-400 font-bold uppercase tracking-widest absolute">
-                或者通过以下方式登录
-              </span>
-            </div>
-
-            <div className="flex gap-6">
-              {/* GitHub 登录按钮 */}
-              <button
-                type="button"
-                disabled={!!socialLoading}
-                onClick={() => handleSocialSignIn('github')}
-                className="flex-1 h-14 bg-[#F0F2F5] rounded-2xl flex items-center justify-center shadow-[6px_6px_12px_#bebebe,-6px_-6px_12px_#ffffff] active:shadow-[inset_4px_4px_8px_#bebebe,inset_-4px_-4px_8px_#ffffff] hover:text-[#9C27B0] transition-all"
-              >
-                <span className="text-[10px] font-black uppercase tracking-widest">
-                  {socialLoading === 'github' ? '跳转中...' : 'GitHub'}
-                </span>
-              </button>
-
-              {/* Google 登录按钮 */}
-              <button
-                type="button"
-                disabled={!!socialLoading}
-                onClick={() => handleSocialSignIn('google')}
-                className="flex-1 h-14 bg-[#F0F2F5] rounded-2xl flex items-center justify-center shadow-[6px_6px_12px_#bebebe,-6px_-6px_12px_#ffffff] active:shadow-[inset_4px_4px_8px_#bebebe,inset_-4px_-4px_8px_#ffffff] hover:text-[#9C27B0] transition-all"
-              >
-                <span className="text-[10px] font-black uppercase tracking-widest">
-                  {socialLoading === 'google' ? '跳转中...' : 'Google'}
-                </span>
-              </button>
-            </div>
-          </div>
 
           <div className="mt-8 text-center space-y-2">
              <p className="text-[10px] text-gray-400 font-medium">

@@ -3,19 +3,22 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-// 导入获取用户信息和登出的 Action
-import { getUserProfile, logout } from '@/app/login/actions';
+// 核心优化：改用重构后统一的 getSessionUser 替代已废弃的 getUserProfile
+import { getSessionUser, logout } from '@/app/login/actions';
+import { UserSession } from '@/types/auth';
 
 export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = useState<{ name?: string; email: string; credits?: number; role?: string } | null>(null);
+  
+  // 核心优化：明确定义状态类型，告别弱类型 any
+  const [user, setUser] = useState<UserSession | null>(null);
 
   // 封装获取用户信息的逻辑
   const fetchUser = useCallback(async () => {
-    const userData = await getUserProfile();
+    const userData = await getSessionUser();
     if (userData) {
-      setUser(userData as any);
+      setUser(userData);
     }
   }, []);
 
@@ -45,7 +48,7 @@ export default function Navbar() {
     }
   };
 
-  // --- 重新核对的菜单项：包含所有功能 ---
+  // 菜单项配置
   const menuItems = [
     { name: '文字转语音', path: '/', emoji: '🎙️' },
     { name: '声音复刻', path: '/clone', emoji: '🧬', disabled: true }, 
@@ -132,7 +135,7 @@ export default function Navbar() {
                   {user.name || '核心创作者'}
                 </span>
                 <span className="text-[9px] text-[#9C27B0] font-black uppercase tracking-wider italic opacity-70">
-                  {user.role === 'member' ? 'Pro Member' : 'Standard'}
+                  {user.role === 'vip' ? 'Pro Member' : 'Standard'}
                 </span>
               </div>
               <div className="w-9 h-9 rounded-full border-2 border-white shadow-md bg-gradient-to-tr from-[#9C27B0] to-purple-400 flex items-center justify-center text-white text-xs font-black">
@@ -163,12 +166,6 @@ export default function Navbar() {
           </Link>
         )}
       </div>
-
-      <style jsx>{`
-        .shadow-physical {
-          box-shadow: 4px 4px 8px #bebebe, -4px -4px 8px #ffffff;
-        }
-      `}</style>
     </nav>
   );
 }

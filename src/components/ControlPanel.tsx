@@ -15,11 +15,10 @@ export default function ControlPanel({ text, selectedVoice, audioUrl, setAudioUr
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  // 定义动态输入上限：游客 300 字，登录用户 1500 字
+  // 核心逻辑修改：未登录为游客（300字），登录用户 1500 字
   const maxInputLength = user ? 1500 : 300; 
 
   // 计算当前文本消耗
-  // 修正点：将正则改为一次性过滤 [#tag] 和 [/#tag]，解决反向引用未定义的报错
   const plainText = text
     .replace(/<[^>]*>/g, '') // 过滤 HTML/SSML 标签
     .replace(/\[\/?#\w+\]/g, ''); // 过滤 [#tag] 和 [/#tag]
@@ -30,15 +29,23 @@ export default function ControlPanel({ text, selectedVoice, audioUrl, setAudioUr
   const isOutOfCredits = user && charCount > currentCredits;
   const isOverLimit = charCount > maxInputLength;
   
-  // 校验逻辑
-  const canGenerate = text.trim() && !isOutOfCredits && !isOverLimit;
+  // 核心改动点：只要文本不为空且没超限，哪怕是游客 (!user) 也允许高亮并可以点击按钮触发体验！
+  const canGenerate = text.trim() && !isOverLimit && (!user || !isOutOfCredits);
+
+  // 跳转到登录页的方法
+  const triggerLoginRedirect = (msg: string) => {
+    alert(msg);
+    router.push('/login');
+  };
 
   const handleGenerate = async () => {
-    if (!user && charCount > 300) return alert("游客仅限 300 字，请登录解锁 1500 字额度");
-    if (!user) return alert("请先登录后再进行配音");
+    // 基础边界拦截
     if (!text.trim()) return alert("请输入文案内容");
-    if (isOverLimit) return alert(`单次输入不能超过 ${maxInputLength} 字`);
-    if (isOutOfCredits) return alert("余额不足，请减少字数或充值");
+    if (isOverLimit) {
+      if (!user) return triggerLoginRedirect(`游客单次上限 300 字。登录可立享 1500 字单次上限，并送 1500 点初始算力！`);
+      return alert(`单次输入不能超过 ${maxInputLength} 字`);
+    }
+    if (user && isOutOfCredits) return alert("余额不足，请减少字数或充值");
     
     setLoading(true);
     setAudioUrl(""); 
@@ -62,12 +69,17 @@ export default function ControlPanel({ text, selectedVoice, audioUrl, setAudioUr
         body: JSON.stringify({ 
           text: finalSsml, 
           voiceId: selectedVoice,
-          userId: user.id 
+          userId: user?.id || null // 游客发送 null 即可，后端会使用安全的 Cookie 判断
         }),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
+        // 如果后端返回特征错误码 NEED_LOGIN，直接导向登录页
+        if (errorData.error === "NEED_LOGIN") {
+          triggerLoginRedirect(errorData.message || "体验额度已达上限，请登录解锁更多特权");
+          return;
+        }
         throw new Error(errorData.error || "合成失败");
       }
 
@@ -97,8 +109,8 @@ export default function ControlPanel({ text, selectedVoice, audioUrl, setAudioUr
       const url = URL.createObjectURL(blob);
       setAudioUrl(url);
 
-      // 通知导航栏更新余额
-      if (typeof window !== 'undefined') {
+      // 通知导航栏更新余额（如果是登录用户）
+      if (user && typeof window !== 'undefined') {
         window.dispatchEvent(new Event('balanceUpdated'));
       }
 
@@ -141,7 +153,7 @@ export default function ControlPanel({ text, selectedVoice, audioUrl, setAudioUr
           <div className="text-center">
             {isOverLimit ? (
               <p className="text-[12px] text-red-400 font-bold italic tracking-widest uppercase animate-pulse">
-                ⚠️ 文本长度超过 {maxInputLength} 字上限
+                ⚠️ 文本长度超过 {maxInputLength} 字{ !user && '游客' }上限
               </p>
             ) : isOutOfCredits ? (
               <p className="text-[12px] text-red-400 font-bold italic tracking-widest uppercase">
@@ -149,7 +161,7 @@ export default function ControlPanel({ text, selectedVoice, audioUrl, setAudioUr
               </p>
             ) : (
               <p className="text-[12px] text-gray-300 font-medium italic tracking-widest uppercase">
-                Ready to generate
+                { !user ? '✨ 游客模式：享有 300 字免费体验额度' : 'Ready to generate' }
               </p>
             )}
           </div>
