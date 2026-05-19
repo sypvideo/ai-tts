@@ -30,7 +30,7 @@ export default function PricingPage() {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const plans: Plan[] = [
-    { id: 'base', name: '基础包', credits: 2, price: 0.1, originalPrice: 19, discountTag: '立省9.1元', unit: '万字', color: '#9C27B0', desc: '适合个人偶尔尝试、学生课堂汇报' },
+    { id: 'base', name: '基础包', credits: 2, price: 9.9, originalPrice: 19, discountTag: '立省9.1元', unit: '万字', color: '#9C27B0', desc: '适合个人偶尔尝试、学生课堂汇报' },
     { id: 'std', name: '标准包', credits: 10, price: 39, originalPrice: 79, discountTag: '直降40元', unit: '万字', color: '#9C27B0', desc: '高性价比，自媒体博主首选套餐', popular: true },
     { id: 'pro', name: '专业包', credits: 25, price: 99, originalPrice: 199, discountTag: '低至5折', unit: '万字', color: '#9C27B0', desc: '商业创作，自媒体矩阵极致成本' },
   ];
