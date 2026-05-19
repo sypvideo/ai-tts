@@ -106,6 +106,7 @@ if (planId === 'base') {
     `;
 
     // 支付参数
+    console.log('[Notify URL]:', `${siteUrl}/api/pay/notify`);
     const payParams: Record<string, any> = {
       pid: parseInt(pid),
       type: 'alipay',
