@@ -37,9 +37,10 @@ export async function POST(req: NextRequest) {
   const sql = neon(dbUrl);
 
   try {
-    const { planId, amount, userId } = await req.json();
+    // 即使前端传了 amount，我们也在后端重新用 realAmount 校验和覆盖它
+    const { planId, userId } = await req.json();
 
-    if (!planId || !amount || !userId) {
+    if (!planId || !userId) {
       return NextResponse.json(
         { error: '缺少核心订单参数' },
         { status: 400 }
@@ -49,14 +50,8 @@ export async function POST(req: NextRequest) {
     const pid = process.env.MZ_PAY_PID;
     const payKey = process.env.MZ_PAY_KEY;
 
-    const siteUrl =
-      process.env.NEXT_PUBLIC_SITE_URL ||
-      'http://localhost:3000';
-
-    const siteName = (
-      process.env.MZ_PAY_SITENAME ||
-      'AI配音助手Pro'
-    ).replace(/[\s]/g, '');
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+    const siteName = (process.env.MZ_PAY_SITENAME || 'AI配音助手Pro').replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, ''); // 过滤掉特殊符号
 
     if (!pid || !payKey) {
       return NextResponse.json(
@@ -65,24 +60,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 套餐配置
-    let creditsToMin = 2000;
+    // ⭐ 安全核心：在后端牢牢锁死价格与额度，杜绝任何前端篡改可能
+    let creditsToMin = 20000;
     let planName = '基础包';
+    let realAmount = 9.90;
 
     if (planId === 'std') {
       creditsToMin = 100000;
       planName = '标准包';
+      realAmount = 39.00;
     } else if (planId === 'pro') {
       creditsToMin = 250000;
       planName = '专业包';
+      realAmount = 99.00;
     }
+
+    // 💡【测试专用桩】如果你想进行 0.1 元的真实线上测试，直接解开下面这行的注释即可
+    // realAmount = 0.10; 
 
     // 商户订单号
     const outTradeNo = `PAY${Date.now()}${Math.floor(
       1000 + Math.random() * 9000
     )}`;
 
-    // 保存本地订单
+    // 保存本地订单 (写入安全的后端真实金额 realAmount)
     await sql`
       INSERT INTO orders (
         user_id,
@@ -96,7 +97,7 @@ export async function POST(req: NextRequest) {
         ${String(userId)},
         ${planId},
         ${creditsToMin},
-        ${amount},
+        ${realAmount},
         'pending',
         ${outTradeNo}
       )
@@ -110,7 +111,7 @@ export async function POST(req: NextRequest) {
       notify_url: `${siteUrl}/api/pay/notify`,
       return_url: `${siteUrl}/pricing`,
       name: planName,
-      money: Number(amount).toFixed(2),
+      money: realAmount.toFixed(2), // 永远使用后端高安全级的金额
       sitename: siteName
     };
 
@@ -120,64 +121,51 @@ export async function POST(req: NextRequest) {
 
     // 表单请求
     const formDataBody = new URLSearchParams();
-
     Object.keys(payParams).forEach(key => {
-      formDataBody.append(
-        key,
-        String(payParams[key])
-      );
+      formDataBody.append(key, String(payParams[key]));
     });
 
-    // 请求支付网关
-    const mapiResponse = await fetch(
-      'https://mzf.jzmohe.com/mapi.php',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type':
-            'application/x-www-form-urlencoded'
-        },
-        body: formDataBody.toString()
-      }
-    );
+    // 请求支付网关 (增加 10 秒超时控制，防止接口卡死)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-    const responseText =
-      await mapiResponse.text();
+    let mapiResponse;
+    try {
+      mapiResponse = await fetch(
+        'https://mzf.jzmohe.com/mapi.php',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+          },
+          body: formDataBody.toString(),
+          signal: controller.signal
+        }
+      );
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
-    console.log(
-      '[MAPI Real Debug]:',
-      responseText
-    );
+    const responseText = await mapiResponse.text();
+    console.log('[MAPI Real Debug]:', responseText);
 
     let mapiData: any;
-
     try {
       mapiData = JSON.parse(responseText);
     } catch (e) {
       return NextResponse.json(
-        {
-          error: `网关非标准JSON: ${responseText}`
-        },
+        { error: `网关非标准JSON: ${responseText}` },
         { status: 500 }
       );
     }
 
     // 支付创建成功
-    if (
-      mapiData &&
-      (mapiData.code == 1 ||
-        mapiData.code == '1')
-    ) {
-      const finalQr =
-        mapiData.qrcode ||
-        mapiData.code_url;
+    if (mapiData && (mapiData.code == 1 || mapiData.code == '1')) {
+      const finalQr = mapiData.qrcode || mapiData.code_url;
 
       if (!finalQr) {
         return NextResponse.json(
-          {
-            error:
-              '支付通道获取成功，但未解析出二维码链接'
-          },
+          { error: '支付通道获取成功，但未解析出二维码链接' },
           { status: 400 }
         );
       }
@@ -190,26 +178,14 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json(
-      {
-        error:
-          mapiData.msg ||
-          `网关拒绝 (状态码: ${mapiData.code})`
-      },
+      { error: mapiData.msg || `网关拒绝 (状态码: ${mapiData.code})` },
       { status: 400 }
     );
   } catch (error: any) {
-    console.error(
-      '[Pay Create Error]:',
-      error
-    );
-
-    return NextResponse.json(
-      {
-        error:
-          error.message ||
-          '创建支付订单失败'
-      },
-      { status: 500 }
-    );
+    if (error.name === 'AbortError') {
+      return NextResponse.json({ error: '连接支付网关超时，请稍后重试' }, { status: 504 });
+    }
+    console.error('[Pay Create Error]:', error);
+    return NextResponse.json({ error: error.message || '创建支付订单失败' }, { status: 500 });
   }
 }
