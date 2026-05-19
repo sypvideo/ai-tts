@@ -66,16 +66,19 @@ export async function POST(req: NextRequest) {
     }
 
     // 套餐配置
-    let creditsToMin = 20000;
-    let planName = '基础包';
+let creditsToMin = 20000;
+let planName = '基础包';
+let finalAmount = amount; // 引入一个新变量来装最终价格
 
-    if (planId === 'std') {
-      creditsToMin = 100000;
-      planName = '标准包';
-    } else if (planId === 'pro') {
-      creditsToMin = 250000;
-      planName = '专业包';
-    }
+if (planId === 'base') {
+  finalAmount = "0.1";     // 💡 核心改动：如果是基础包，强行重写金额为 0.1 元
+} else if (planId === 'std') {
+  creditsToMin = 100000;
+  planName = '标准包';
+} else if (planId === 'pro') {
+  creditsToMin = 250000;
+  planName = '专业包';
+}
 
     // 商户订单号
     const outTradeNo = `PAY${Date.now()}${Math.floor(
