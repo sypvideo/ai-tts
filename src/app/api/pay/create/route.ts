@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
     // ⭐ 安全核心：在后端牢牢锁死价格与额度，杜绝任何前端篡改可能
     let creditsToMin = 20000;
     let planName = '基础包';
-    let realAmount = 0.10;
+    let realAmount = 0.12;
 
     if (planId === 'std') {
       creditsToMin = 100000;
