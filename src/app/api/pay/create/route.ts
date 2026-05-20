@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
     let mapiResponse;
     try {
       mapiResponse = await fetch(
-        'https://pay.mzfpay.com/xpay/epay/mapi.php',
+        'https://mzf.mapay.cc/xpay/epay/mapi.php',
         {
           method: 'POST',
           headers: {
