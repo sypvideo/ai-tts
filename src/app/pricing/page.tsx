@@ -56,16 +56,21 @@ export default function PricingPage() {
           body: JSON.stringify({ outTradeNo })
         });
         const data = await res.json();
+        
+        // 💡 完美闭环：一旦本地数据库状态变为 success，立刻收回弹窗
         if (data.status === 'success') {
           stopPolling();
           setShowQrModal(false);
+          setCurrentQrUrl('');
+          setCurrentOrderNo('');
           alert("🎉 充值成功！您的字符算力额度已实时到账。");
           router.refresh();
+          // 如果你本地有全局状态管理用户额度，可以在这里调用刷新
         }
       } catch (err) {
         console.error("轮询查单失败:", err);
       }
-    }, 2500);
+    }, 2500); // 2.5秒高频轮询
   };
 
   const stopPolling = () => {
@@ -103,7 +108,7 @@ export default function PricingPage() {
         setCurrentQrUrl(data.qrcode);
         setCurrentOrderNo(data.outTradeNo);
         setShowQrModal(true);
-        startPolling(data.outTradeNo);
+        startPolling(data.outTradeNo); // 开启轮询
       } else {
         alert(`【下单失败提示】:\n${data.error || '后端未返回有效错误信息'}`);
       }
@@ -111,6 +116,7 @@ export default function PricingPage() {
       console.error("Purchase error:", error);
       alert(`网络请求失败: ${error.message || error}`);
     } finally {
+      loadingId === plan.id && setLoadingId(null);
       setLoadingId(null);
     }
   };
@@ -123,8 +129,6 @@ export default function PricingPage() {
   return (
     <main className="min-h-screen bg-[#F0F2F5] relative overflow-hidden">
       <Navbar />
-
-      {/* ✅ 已移除：背景艺术微光呼吸晕代码 */}
       
       <div className="pt-36 pb-20 px-4 md:px-8 flex flex-col items-center relative z-10">
         
