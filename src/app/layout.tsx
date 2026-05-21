@@ -3,13 +3,16 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import Navbar from "../components/Navbar";
 import Announcement from "../components/Announcement";
-import VisitorStats from "../components/VisitorStats";
+
+// 引入统一后的商业化页尾组件
+import Footer from "../components/Footer";
+
 import "./globals.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
-});
+ });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
@@ -36,27 +39,28 @@ export default function RootLayout({
         <Navbar />
 
         {/* 2. 主内容容器 */}
-        <div className="pt-20 flex flex-col min-h-screen relative z-10">
+        <div className="pt-20 flex flex-col min-h-screen relative z-10 justify-between">
           
-          {/* 3. 运行公告栏 */}
-          <Announcement />
+          <div className="flex flex-col flex-1">
+            {/* 3. 运行公告栏 */}
+            <Announcement />
 
-          {/* 4. 页面主体内容 */}
-          <main className="flex-1 flex flex-col">
-            {children}
-          </main>
+            {/* 4. 页面主体内容 */}
+            <main className="flex-1 flex flex-col">
+              {children}
+            </main>
+          </div>
+
+          {/* 5. 挂载融合了统计功能的页尾 */}
+          <Footer />
         </div>
 
-        {/* 5. 访客统计挂件 */}
-        <VisitorStats />
-
-        {/* 6. 统计脚本 - 原有的统计脚本 */}
+        {/* 6. 统计脚本 - 放在全局最底部静默运行，不干扰 UI 渲染 */}
         <Script 
           src="https://stats.buqiuren.com/script.js" 
           strategy="afterInteractive" 
         />
 
-        {/* 7. 不蒜子统计脚本 - 新增：用于支撑 VisitorStats 组件的数据 */}
         <Script 
           src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js" 
           strategy="afterInteractive" 
