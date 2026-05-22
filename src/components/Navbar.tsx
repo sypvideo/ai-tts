@@ -31,6 +31,7 @@ export default function Navbar() {
       fetchUser();
     };
 
+    // 💡 这里的原有事件监听在 push 上线后，会被 pricing 页面完美触发！
     window.addEventListener('balanceUpdated', handleBalanceUpdate);
     const timer = setInterval(fetchUser, 60000); 
 
@@ -107,7 +108,7 @@ export default function Navbar() {
         {user ? (
           <div className="flex items-center bg-white/50 p-1.5 pr-3 rounded-full border border-white/60 shadow-sm group/user">
             
-            {/* 余额显示胶囊 */}
+            {/* 💡 余额显示胶囊：这里的数字现在会在支付成功的那一秒，直接在前端无刷闪变刷新！ */}
             <div 
               onClick={() => router.push('/pricing')}
               className="flex items-center bg-[#F5F5F7] rounded-full px-4 py-2 border border-gray-100 shadow-inner gap-3 mr-1 group/credit cursor-pointer hover:bg-white hover:shadow-md transition-all active:scale-95"
