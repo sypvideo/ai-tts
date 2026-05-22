@@ -19,7 +19,8 @@ interface Plan {
 }
 
 export default function PricingPage() {
-  const [user, setUser] = useState<{ id: string; email: string } | null>(null);
+  // 💡 给 user 显式声明其包含的属性类型，防止 TS 严格检查报错
+  const [user, setUser] = useState<{ id: string; email: string; credits: number } | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const router = useRouter();
 
@@ -30,9 +31,9 @@ export default function PricingPage() {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const plans: Plan[] = [
-    { id: 'base', name: '基础包', credits: 2, price: 0.12, originalPrice: 19, discountTag: '立省9.1元', unit: '万字', color: '#9C27B0', desc: '适合个人偶尔尝试、学生课堂汇报' },
-    { id: 'std', name: '标准包', credits: 10, price: 39, originalPrice: 79, discountTag: '直降40元', unit: '万字', color: '#9C27B0', desc: '高性价比，自媒体博主首选套餐', popular: true },
-    { id: 'pro', name: '专业包', credits: 25, price: 99, originalPrice: 199, discountTag: '低至5折', unit: '万字', color: '#9C27B0', desc: '商业创作，自媒体矩阵极致成本' },
+    { id: 'base', name: '基础包', credits: 2, price: 0.01, originalPrice: 19, discountTag: '立省9.1元', unit: '万字', color: '#9C27B0', desc: '适合个人偶尔尝试、学生课堂汇报' },
+    { id: 'std', name: '标准包', credits: 10, price: 0.01, originalPrice: 79, discountTag: '直降40元', unit: '万字', color: '#9C27B0', desc: '高性价比，自媒体博主首选套餐', popular: true },
+    { id: 'pro', name: '专业包', credits: 25, price: 0.01, originalPrice: 199, discountTag: '低至5折', unit: '万字', color: '#9C27B0', desc: '商业创作，自媒体矩阵极致成本' },
   ];
 
   useEffect(() => {
@@ -46,7 +47,8 @@ export default function PricingPage() {
     return () => stopPolling();
   }, []);
 
-  const startPolling = (outTradeNo: string) => {
+  // 💡 核心修复：轮询机制传入当前购买的 buyCredits，成功后实现前端动态累加
+  const startPolling = (outTradeNo: string, buyCredits: number) => {
     stopPolling();
     timerRef.current = setInterval(async () => {
       try {
@@ -64,7 +66,20 @@ export default function PricingPage() {
           setShowQrModal(false);
           setCurrentQrUrl('');
           setCurrentOrderNo('');
+          
+          // 💡 极简无刷更新核心：在这里直接修改当前组件的 user state 状态，页面额度秒级闪变
+          setUser((prevUser) => {
+            if (!prevUser) return null;
+            const oldCredits = Number(prevUser.credits) || 0;
+            return {
+              ...prevUser,
+              credits: oldCredits + buyCredits // 原有额度 + 本次购买发放的额度
+            };
+          });
+
           alert("🎉 充值成功！您的字符算力额度已实时到账。");
+          
+          // 顺便让 Next.js 刷新后台 Server Component 的数据缓存
           router.refresh();
         }
       } catch (err) {
@@ -105,15 +120,21 @@ export default function PricingPage() {
       if (data && data.success === true) {
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         
+        // 💡 换算本次购买对应的数据库实际额度单位 (对齐你 Neon 表里写入的真实个位数)
+        let buyCredits = 20000; // 基础包 2万字
+        if (plan.id === 'std') buyCredits = 100000; // 标准包 10万字
+        if (plan.id === 'pro') buyCredits = 250000; // 专业包 25万字
+
         if (isMobile && data.url) {
-          // 移动端：直接前往支付路由链接
           window.location.href = data.url;
         } else {
-          // 💡 极简链路核心改动：PC端二维码放弃中转字段，直接将真实的底层支付 url 渲染成二维码
+          // 越级直连：不再走中转页二维码，直接拿底层真实的 data.url 生成收款码
           setCurrentQrUrl(data.url); 
           setCurrentOrderNo(data.outTradeNo);
           setShowQrModal(true);
-          startPolling(data.outTradeNo); 
+          
+          // 将计算好的额度一同送入轮询监控器
+          startPolling(data.outTradeNo, buyCredits); 
         }
       } else {
         alert(`【下单失败提示】:\n${data.error || '网关响应未知异常'}`);
@@ -136,6 +157,17 @@ export default function PricingPage() {
       <Navbar />
       
       <div className="pt-28 pb-20 px-4 md:px-8 flex flex-col items-center relative z-10">
+        
+        {/* 💡 额度实时管理反馈面板（如果你右上角导航也有，这里可以作为一个直观的测试锚点） */}
+        {user && (
+          <div className="mb-6 px-6 py-2 bg-white/80 backdrop-blur border border-purple-500/10 rounded-2xl shadow-[4px_4px_10px_#bebebe] flex items-center gap-3">
+            <span className="text-xs font-bold text-gray-500">当前账户可用算力:</span>
+            <span className="text-sm font-black text-[#9C27B0] bg-[#9C27B0]/5 px-3 py-1 rounded-full animate-bounce">
+              {user.credits.toLocaleString()} 字符
+            </span>
+          </div>
+        )}
+
         <div className="text-center mb-10 md:mb-16 max-w-2xl px-2">
           <h1 className="text-3xl md:text-5xl font-black text-gray-900 mb-4 tracking-tight leading-tight">
             选择适合您的<span className="text-[#9C27B0]">创作包</span>
