@@ -1,52 +1,37 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { neon } from '@neondatabase/serverless';
 
-export async function POST(req: NextRequest) {
-  const dbUrl = process.env.DATABASE_URL;
-  if (!dbUrl) {
-    return NextResponse.json({ error: "服务器数据库配置异常" }, { status: 500 });
-  }
-
-  const sql = neon(dbUrl);
-
+export async function POST(req: Request) {
   try {
     const { outTradeNo } = await req.json();
+    const databaseUrl = process.env.DATABASE_URL;
 
-    if (!outTradeNo) {
-      return NextResponse.json({ error: "缺少商户订单号" }, { status: 400 });
+    if (!outTradeNo || !databaseUrl) {
+      return NextResponse.json({ success: false, trade_status: 'error', msg: '参数异常' });
     }
 
-    // 🚀 高性能改造：直接查询本地 Neon 数据库，对齐系统最新重建表的 order_no 字段
-    const existingOrders = await sql`
-      SELECT status 
-      FROM orders 
-      WHERE order_no = ${String(outTradeNo)} 
-      LIMIT 1
-    `;
+    const sql = neon(databaseUrl);
+    
+    // 💡 适配你的原始表单：根据 trade_no 查状态
+    const results = await sql`SELECT status FROM orders WHERE trade_no = ${outTradeNo} LIMIT 1`;
 
-    // 如果找不到订单，返回等待
-    if (existingOrders.length === 0) {
-      return NextResponse.json({ status: 'pending', message: '订单创建中' });
-    }
-
-    const currentStatus = existingOrders[0].status;
-
-    // 如果异步回调或者后台手动补单已经把状态改成了 success
-    if (currentStatus === 'success') {
-      return NextResponse.json({ 
-        status: 'success', 
-        message: '支付成功，额度已注入' 
+    // 对齐你定义的成功状态：'success'
+    if (results.length > 0 && results[0].status === 'success') {
+      return NextResponse.json({
+        success: true,
+        trade_status: 'paid', // 让前端感知到已付
+        msg: '支付已确认成功'
       });
     }
 
-    // 其余情况（如 pending）一律返回等待，促使前端继续轮询
-    return NextResponse.json({ 
-      status: 'pending', 
-      message: '等待用户支付中...' 
+    return NextResponse.json({
+      success: false,
+      trade_status: 'pending',
+      msg: '订单尚未支付'
     });
 
   } catch (error: any) {
-    console.error("[Local Pay Query Error]:", error);
-    return NextResponse.json({ error: error.message || "查询订单失败" }, { status: 500 });
+    console.error('查单异常:', error);
+    return NextResponse.json({ success: false, trade_status: 'error' }, { status: 500 });
   }
 }

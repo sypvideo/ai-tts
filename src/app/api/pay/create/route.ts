@@ -1,191 +1,82 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { neon } from '@neondatabase/serverless';
+import { NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { neon } from '@neondatabase/serverless';
 
-function generateSign(params: Record<string, any>, key: string): string {
-  const sortedKeys = Object.keys(params)
-    .filter(
-      k =>
-        k !== 'sign' &&
-        k !== 'sign_type' &&
-        params[k] !== '' &&
-        params[k] !== null &&
-        params[k] !== undefined
-    )
-    .sort();
-
-  const signStr = sortedKeys
-    .map(k => `${k}=${params[k]}`)
-    .join('&');
-
-  return crypto
-    .createHash('md5')
-    .update(signStr + key)
-    .digest('hex');
+function generateHupijiaoSign(params: Record<string, any>, secret: string) {
+  const sortedKeys = Object.keys(params).sort();
+  const pairs: string[] = [];
+  for (const key of sortedKeys) {
+    if (key !== 'hash' && params[key] !== '' && params[key] !== null && params[key] !== undefined) {
+      pairs.push(`${key}=${params[key]}`);
+    }
+  }
+  return crypto.createHash('md5').update(pairs.join('&') + secret, 'utf8').digest('hex');
 }
 
-export async function POST(req: NextRequest) {
-  const dbUrl = process.env.DATABASE_URL;
-
-  if (!dbUrl) {
-    return NextResponse.json(
-      { error: '服务器数据库配置异常' },
-      { status: 500 }
-    );
-  }
-
-  const sql = neon(dbUrl);
-
+export async function POST(req: Request) {
   try {
-    // 即使前端传了 amount，我们也在后端重新用 realAmount 校验和覆盖它
-    const { planId, userId } = await req.json();
+    const { planId, amount, userId } = await req.json();
 
-    if (!planId || !userId) {
-      return NextResponse.json(
-        { error: '缺少核心订单参数' },
-        { status: 400 }
-      );
+    const appid = process.env.HUPIJIAO_APPID;
+    const secret = process.env.HUPIJIAO_SECRET;
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+    const databaseUrl = process.env.DATABASE_URL;
+
+    if (!appid || !secret || !databaseUrl) {
+      return NextResponse.json({ success: false, error: '商户配置或数据库凭证缺失' }, { status: 500 });
     }
 
-    const pid = process.env.MZ_PAY_PID;
-    const payKey = process.env.MZ_PAY_KEY;
+    // 根据不同的套餐 ID，为原始表的 credits 字段匹配对应的算力值 (万字)
+    let creditsCount = 20000; // base 2万字
+    if (planId === 'std') creditsCount = 100000; // std 10万字
+    if (planId === 'pro') creditsCount = 250000; // pro 25万字
 
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-    const siteName = (process.env.MZ_PAY_SITENAME || 'AI配音助手Pro').replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, ''); // 过滤掉特殊符号
+    const title = `AI配音助手Pro-${planId === 'base' ? '基础' : planId === 'std' ? '标准' : '专业'}包`;
+    const outTradeNo = `XH${Date.now()}${Math.floor(Math.random() * 1000)}`;
 
-    if (!pid || !payKey) {
-      return NextResponse.json(
-        { error: '服务器支付网关配置异常' },
-        { status: 500 }
-      );
-    }
-
-    // ⭐ 安全核心：在后端牢牢锁死价格与额度，杜绝任何前端篡改可能
-    let creditsToMin = 20000;
-    let planName = '基础包';
-    let realAmount = 0.13;
-
-    if (planId === 'std') {
-      creditsToMin = 100000;
-      planName = '标准包';
-      realAmount = 39.00;
-    } else if (planId === 'pro') {
-      creditsToMin = 250000;
-      planName = '专业包';
-      realAmount = 99.00;
-    }
-
-    // 💡【测试专用桩】如果你想进行 0.1 元的真实线上测试，直接解开下面这行的注释即可
-    // realAmount = 0.10; 
-
-    // 商户订单号
-    const outTradeNo = `PAY${Date.now()}${Math.floor(
-      1000 + Math.random() * 9000
-    )}`;
-
-    // 保存本地订单 (写入安全的后端真实金额 realAmount)
-    await sql`
-      INSERT INTO orders (
-        user_id,
-        plan_id,
-        credits,
-        amount,
-        status,
-        order_no
-      )
-      VALUES (
-        ${String(userId)},
-        ${planId},
-        ${creditsToMin},
-        ${realAmount},
-        'pending',
-        ${outTradeNo}
-      )
-    `;
-
-    // 支付参数
-    const payParams: Record<string, any> = {
-      pid: parseInt(pid),
-      type: 'alipay',
-      out_trade_no: outTradeNo,
+    const params: Record<string, any> = {
+      version: '1.1',
+      appid: appid,
+      trade_order_id: outTradeNo,
+      total_fee: amount.toString(),
+      title: title,
+      time: Math.floor(Date.now() / 1000).toString(),
       notify_url: `${siteUrl}/api/pay/notify`,
       return_url: `${siteUrl}/pricing`,
-      name: planName,
-      money: realAmount.toFixed(2), // 永远使用后端高安全级的金额
-      sitename: siteName
+      nonce_str: crypto.randomBytes(16).toString('hex'),
     };
 
-    // 签名
-    payParams.sign = generateSign(payParams, payKey);
-    payParams.sign_type = 'MD5';
+    params.hash = generateHupijiaoSign(params, secret);
 
-    // 表单请求
-    const formDataBody = new URLSearchParams();
-    Object.keys(payParams).forEach(key => {
-      formDataBody.append(key, String(payParams[key]));
+    const response = await fetch('https://api.xunhupay.com/payment/do.html', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(params).toString(),
     });
 
-    // 请求支付网关 (增加 10 秒超时控制，防止接口卡死)
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const data = await response.json();
 
-    let mapiResponse;
-    try {
-      mapiResponse = await fetch(
-        'https://mzf.mapay.cc/xpay/epay/mapi.php',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
-          },
-          body: formDataBody.toString(),
-          signal: controller.signal
-        }
-      );
-    } finally {
-      clearTimeout(timeoutId);
-    }
-
-    const responseText = await mapiResponse.text();
-    console.log('[MAPI Real Debug]:', responseText);
-
-    let mapiData: any;
-    try {
-      mapiData = JSON.parse(responseText);
-    } catch (e) {
-      return NextResponse.json(
-        { error: `网关非标准JSON: ${responseText}` },
-        { status: 500 }
-      );
-    }
-
-    // 支付创建成功
-    if (mapiData && (mapiData.code == 1 || mapiData.code == '1')) {
-      const finalQr = mapiData.qrcode || mapiData.code_url;
-
-      if (!finalQr) {
-        return NextResponse.json(
-          { error: '支付通道获取成功，但未解析出二维码链接' },
-          { status: 400 }
-        );
-      }
+    if (data && data.errcode === 0) {
+      const sql = neon(databaseUrl);
+      
+      // 💡 适配你的原始表单：不插入 id (让其自增)，单号对齐 trade_no，增加传入 credits
+      await sql`
+        INSERT INTO orders (user_id, trade_no, plan_id, amount, credits, status) 
+        VALUES (${userId}, ${outTradeNo}, ${planId}, ${Number(amount)}, ${creditsCount}, 'pending')
+      `;
 
       return NextResponse.json({
         success: true,
-        qrcode: finalQr,
-        outTradeNo
+        url: data.url,                 
+        url_qrcode: data.url_qrcode,   
+        outTradeNo: outTradeNo
       });
+    } else {
+      return NextResponse.json({ success: false, error: data.errmsg || '微信支付网关下单失败' });
     }
 
-    return NextResponse.json(
-      { error: mapiData.msg || `网关拒绝 (状态码: ${mapiData.code})` },
-      { status: 400 }
-    );
   } catch (error: any) {
-    if (error.name === 'AbortError') {
-      return NextResponse.json({ error: '连接支付网关超时，请稍后重试' }, { status: 504 });
-    }
-    console.error('[Pay Create Error]:', error);
-    return NextResponse.json({ error: error.message || '创建支付订单失败' }, { status: 500 });
+    console.error('下单接口系统异常:', error);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

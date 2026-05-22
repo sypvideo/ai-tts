@@ -1,243 +1,85 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { neon } from '@neondatabase/serverless';
+import { NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { neon } from '@neondatabase/serverless';
 
-// MD5 验签
-function verifySign(
-  params: Record<string, string>,
-  key: string,
-  incomingSign: string
-): boolean {
-  const sortedKeys = Object.keys(params)
-    .filter(
-      k =>
-        k !== 'sign' &&
-        k !== 'sign_type' &&
-        params[k] !== '' &&
-        params[k] !== null &&
-        params[k] !== undefined
-    )
-    .sort();
-
-  const signStr = sortedKeys
-    .map(k => `${k}=${params[k]}`)
-    .join('&');
-
-  const localSign = crypto
-    .createHash('md5')
-    .update(signStr + key)
-    .digest('hex');
-
-  return (
-    localSign.toLowerCase() ===
-    incomingSign.toLowerCase()
-  );
+// 虎皮椒官方回调安全验签算法
+function verifyHupijiaoNotifySign(params: Record<string, any>, secret: string) {
+  const { hash, ...rest } = params;
+  const sortedKeys = Object.keys(rest).sort();
+  const pairs: string[] = [];
+  for (const key of sortedKeys) {
+    if (rest[key] !== '' && rest[key] !== null && rest[key] !== undefined) {
+      pairs.push(`${key}=${rest[key]}`);
+    }
+  }
+  const stringA = pairs.join('&');
+  return crypto.createHash('md5').update(stringA + secret, 'utf8').digest('hex') === hash;
 }
 
-// 核心处理函数
-async function handle(req: NextRequest) {
-  const dbUrl = process.env.DATABASE_URL;
-
-  if (!dbUrl) {
-    return new NextResponse('fail_db_config', {
-      status: 500
-    });
-  }
-
-  const sql = neon(dbUrl);
-
+export async function POST(req: Request) {
   try {
-    // 同时兼容 GET 和 POST
-    let searchParams: URLSearchParams;
+    // 1. 解析虎皮椒发送过来的表单数据
+    const formData = await req.formData();
+    const data: Record<string, any> = {};
+    formData.forEach((value, key) => { data[key] = value; });
 
-    if (req.method === 'GET') {
-      searchParams = new URL(req.url).searchParams;
-    } else {
-      const rawBody = await req.text();
-      searchParams = new URLSearchParams(rawBody);
+    const secret = process.env.HUPIJIAO_SECRET || '';
+    const databaseUrl = process.env.DATABASE_URL || '';
+
+    // 2. 严格安全验证：校验签名是否由虎皮椒官方生成，防止被黑客恶意白嫖算力
+    if (!verifyHupijiaoNotifySign(data, secret)) {
+      console.error('❌ 支付回调验签失败，疑似伪造请求');
+      return new Response('sign error', { status: 400 });
     }
 
-    const trade_no =
-      searchParams.get('trade_no') || '';
+    // 3. 检查微信扣款状态：OD 代表用户已经成功支付
+    if (data.status === 'OD') {
+      const outTradeNo = data.trade_order_id; // 对应的商户长单号
+      const apiTradeNo = data.open_order_id;  // 虎皮椒平台的官方流水号
+      const sql = neon(databaseUrl);
 
-    const out_trade_no =
-      searchParams.get('out_trade_no') || '';
-
-    const money =
-      searchParams.get('money') || '';
-
-    const trade_status =
-      searchParams.get('trade_status') || '';
-
-    const sign =
-      searchParams.get('sign') || '';
-
-    // 基础参数校验
-    if (
-      !out_trade_no ||
-      !money ||
-      !trade_status ||
-      !sign
-    ) {
-      console.error(
-        '[Notify] 缺少必要参数'
-      );
-
-      return new NextResponse(
-        'fail_params_missing',
-        {
-          status: 400
-        }
-      );
-    }
-
-    // 重新组装参数用于验签
-    const payParams: Record<string, string> =
-      {};
-
-    searchParams.forEach((value, key) => {
-      payParams[key] = value;
-    });
-
-    const payKey = process.env.MZ_PAY_KEY;
-
-    if (!payKey) {
-      console.error(
-        '[Notify] 支付密钥未配置'
-      );
-
-      return new NextResponse(
-        'fail_server_config',
-        {
-          status: 500
-        }
-      );
-    }
-
-    // 验签
-    const isSignValid = verifySign(
-      payParams,
-      payKey,
-      sign
-    );
-
-    if (!isSignValid) {
-      console.error(
-        `[Notify] 签名验证失败: ${out_trade_no}`
-      );
-
-      return new NextResponse(
-        'fail_sign_error',
-        {
-          status: 400
-        }
-      );
-    }
-
-    // 判断支付状态
-    if (trade_status !== 'TRADE_SUCCESS') {
-      return new NextResponse('success');
-    }
-
-    // 查询本地订单
-    const existingOrders = await sql`
-      SELECT * FROM orders
-      WHERE order_no = ${out_trade_no}
-      LIMIT 1
-    `;
-
-    if (existingOrders.length === 0) {
-      console.error(
-        `[Notify] 找不到订单: ${out_trade_no}`
-      );
-
-      return new NextResponse(
-        'fail_order_not_found',
-        {
-          status: 404
-        }
-      );
-    }
-
-    const order = existingOrders[0];
-
-    // 防止重复到账
-    if (order.status === 'success') {
-      console.log(
-        `[Notify] 重复通知: ${out_trade_no}`
-      );
-
-      return new NextResponse('success');
-    }
-
-    // 金额校验
-    const localAmount = Number(
-      order.amount
-    ).toFixed(2);
-
-    const incomingMoney =
-      Number(money).toFixed(2);
-
-    if (localAmount !== incomingMoney) {
-      console.error(
-        `[Notify] 金额不一致: 本地 ${localAmount} / 实际 ${incomingMoney}`
-      );
-
-      return new NextResponse(
-        'fail_money_mismatch',
-        {
-          status: 400
-        }
-      );
-    }
-
-    // 更新订单状态
-    await sql`
-      UPDATE orders
-      SET
-        status = 'success',
-        trade_no = ${trade_no},
-        updated_at = NOW()
-      WHERE order_no = ${out_trade_no}
-    `;
-
-    // 增加用户额度
-    await sql`
-      UPDATE users
-      SET credits =
-        COALESCE(credits, 0) + ${Number(
-          order.credits
-        )}
-      WHERE id = ${String(order.user_id)}
-    `;
-
-    console.log(
-      `[Notify] 用户 ${order.user_id} 充值成功 +${order.credits}`
-    );
-
-    // 易支付必须返回 success
-    return new NextResponse('success');
-  } catch (error: any) {
-    console.error(
-      '[Notify Error]:',
-      error
-    );
-
-    return new NextResponse(
-      'fail_exception',
-      {
-        status: 500
+      // 4. 去 Neon 检索该订单（适配新表结构，关联查询 trade_no）
+      const existingOrders = await sql`SELECT * FROM orders WHERE trade_no = ${outTradeNo} LIMIT 1`;
+      if (existingOrders.length === 0) {
+        console.error(`❌ 未找到商户单号为 ${outTradeNo} 的本地订单`);
+        return new Response('order not found', { status: 200 });
       }
-    );
+      
+      const order = existingOrders[0];
+
+      // 5. 幂等性控制：只有在订单是待支付（pending）状态下，才下发额度，防止网络重复通知导致多次加额度
+      if (order.status === 'pending') {
+        
+        // A. 更新订单表状态：将状态改为你的原始表声明的 'success'，并记入对账用的 api_trade_no
+        await sql`
+          UPDATE orders 
+          SET status = 'success', 
+              api_trade_no = ${apiTradeNo},
+              updated_at = NOW() 
+          WHERE trade_no = ${outTradeNo}
+        `;
+        
+        // B. 智能下发额度：无需硬编码，直接读取你在创建订单时已经精准算好并存入表中的 order.credits
+        const creditToBuffer = Number(order.credits);
+
+        // C. 为用户增加算力资产（假设你的用户表叫 users，算力额度字段叫 credits）
+        await sql`
+          UPDATE users 
+          SET credits = credits + ${creditToBuffer} 
+          WHERE id = ${order.user_id}
+        `;
+        
+        console.log(`🎉 【支付大闭环完成】用户 ${order.user_id} 充值成功，已存入 ${creditToBuffer} 字符算力。`);
+      }
+
+      // 6. 必须向虎皮椒网关返回纯文本 success 告诉它我们处理好了，否则它会不间断重复通知
+      return new Response('success', { status: 200 });
+    }
+
+    return new Response('status not OD', { status: 200 });
+
+  } catch (err: any) {
+    console.error('🚨 回调处理接口系统异常:', err);
+    return new Response('error', { status: 500 });
   }
-}
-
-// 兼容 GET
-export async function GET(req: NextRequest) {
-  return handle(req);
-}
-
-// 兼容 POST
-export async function POST(req: NextRequest) {
-  return handle(req);
 }
