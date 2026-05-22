@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState } from 'react';
+// 💡 核心改动：引入 Next.js 官方高性能导航组件，实现路由秒开预加载
+import Link from 'next/link';
 
 export default function Footer() {
   // 💡 商业化运营配置中心（在这里修改您的真实 QQ 号）
@@ -88,7 +90,6 @@ export default function Footer() {
                 onClick={handleCopyQQ}
                 className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#F0F2F5] border border-gray-300 rounded-xl font-black tracking-wide cursor-pointer transition-all hover:scale-[1.02] shadow-[3px_3px_6px_#bebebe,-3px_-3px_6px_#ffffff] active:shadow-[inset_2px_2px_4px_#bebebe,inset_-2px_-2px_4px_#ffffff]"
               >
-                {/* QQ 经典闪烁绿点 */}
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
@@ -105,19 +106,22 @@ export default function Footer() {
           </ul>
         </div>
 
-        {/* 板块 4：创作者流量入口 */}
+        {/* 💡 核心重构板块 4：用 FAQ 常见问题替换掉原来的创作者生态 */}
         <div className="flex flex-col gap-3">
-          <h4 className="text-gray-600 font-black text-sm tracking-wide">创作者生态</h4>
+          <h4 className="text-gray-600 font-black text-sm tracking-wide">常见问题解答</h4>
           <p className="text-[11px] text-gray-600 leading-normal">
-            面向短剧解说团队、MCN 机构、小说推文矩阵提供极致算力支持。
+            关于单次 300 字/1500 字限额说明、计费扣除规则以及商业版权归属。
           </p>
-          <div 
-            onClick={handleCopyQQ}
-            className="w-full mt-1 p-3 bg-[#F0F2F5] border border-gray-300 rounded-2xl cursor-pointer hover:border-gray-400 transition-all shadow-[4px_4px_8px_#bebebe,-4px_-4px_8px_#ffffff] active:shadow-[inset_2px_2px_5px_#bebebe]"
+          <Link 
+            href="/faq"
+            className="w-full mt-1 p-3 bg-[#F0F2F5] border border-gray-300 rounded-2xl cursor-pointer text-gray-700 hover:text-[#9C27B0] hover:border-purple-500/30 transition-all flex flex-col justify-center shadow-[4px_4px_8px_#bebebe,-4px_-4px_8px_#ffffff] active:shadow-[inset_2px_2px_5px_#bebebe] group"
           >
-            <p className="font-black text-xs tracking-wider mb-0.5">🚀 申请大客户特惠通道</p>
-            <p className="text-[10px] font-medium opacity-80">百万字以上打包采购 / 商业授权 / 商务合作</p>
-          </div>
+            <p className="font-black text-xs tracking-wider mb-0.5 group-hover:text-[#9C27B0] transition-colors flex items-center gap-1.5">
+              <span>📖 查阅自助服务中心</span>
+              <span className="text-[10px] transition-transform group-hover:translate-x-0.5">→</span>
+            </p>
+            <p className="text-[10px] font-medium opacity-80 mt-0.5">常见拦截报错 / 充值未到账处理指南</p>
+          </Link>
         </div>
 
       </div>

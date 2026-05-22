@@ -4,6 +4,8 @@ import React, { useEffect, useState, useRef } from 'react';
 import Navbar from '@/components/Navbar';
 import { getSessionUser } from '@/app/login/actions';
 import { useRouter } from 'next/navigation';
+// 💡 纯本地二维码生成库，不再依赖海外 api.qrserver.com
+import QRCode from 'qrcode';
 
 interface Plan {
   id: string;
@@ -24,13 +26,14 @@ export default function PricingPage() {
   const router = useRouter();
 
   const [showQrModal, setShowQrModal] = useState(false);
-  const [currentQrUrl, setCurrentQrUrl] = useState('');
   const [currentOrderNo, setCurrentOrderNo] = useState('');
+  // 💡 存储纯本地计算出来的二维码 Base64 字符串
+  const [qrImageUrl, setQrImageUrl] = useState<string>('');
   
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const plans: Plan[] = [
-    { id: 'base', name: '基础包', credits: 2, price: 0.15, originalPrice: 19, discountTag: '立省9.1元', unit: '万字', color: '#9C27B0', desc: '适合个人偶尔尝试、学生课堂汇报' },
+    { id: 'base', name: '基础包', credits: 2, price: 0.13, originalPrice: 19, discountTag: '立省9.1元', unit: '万字', color: '#9C27B0', desc: '适合个人偶尔尝试、学生课堂汇报' },
     { id: 'std', name: '标准包', credits: 10, price: 39, originalPrice: 79, discountTag: '直降40元', unit: '万字', color: '#9C27B0', desc: '高性价比，自媒体博主首选套餐', popular: true },
     { id: 'pro', name: '专业包', credits: 25, price: 99, originalPrice: 199, discountTag: '低至5折', unit: '万字', color: '#9C27B0', desc: '商业创作，自媒体矩阵极致成本' },
   ];
@@ -63,13 +66,12 @@ export default function PricingPage() {
         if (data && data.success === true && data.trade_status === 'paid') {
           stopPolling();
           setShowQrModal(false);
-          setCurrentQrUrl('');
+          setQrImageUrl('');
           setCurrentOrderNo('');
           
-          // 💡 核心优化 1：触发本地定价页的数据刷新
           await fetchUserStatus();
 
-          // 💡 核心优化 2：精确触发 Navbar.tsx 中现有的事件监听，让顶部额度胶囊数字同步刷新！
+          // 💡 精确触发 Navbar.tsx 中现有的事件监听，让顶部额度胶囊数字同步刷新！
           const event = new CustomEvent('balanceUpdated');
           window.dispatchEvent(event);
 
@@ -117,7 +119,17 @@ export default function PricingPage() {
         if (isMobile && data.url) {
           window.location.href = data.url;
         } else {
-          setCurrentQrUrl(data.url); 
+          // 💡 拿到虎皮椒原生支付链接后，在前端内存中 0.01 秒完成本地高保真二维码渲染
+          const localQrBase64 = await QRCode.toDataURL(data.url, {
+            width: 300,
+            margin: 1,
+            color: {
+              dark: '#000000',
+              light: '#ffffff'
+            }
+          });
+
+          setQrImageUrl(localQrBase64); 
           setCurrentOrderNo(data.outTradeNo);
           setShowQrModal(true);
           startPolling(data.outTradeNo); 
@@ -144,14 +156,7 @@ export default function PricingPage() {
       
       <div className="pt-28 pb-20 px-4 md:px-8 flex flex-col items-center relative z-10">
         
-        {user && (
-          <div className="mb-6 px-6 py-2 bg-white/80 backdrop-blur border border-purple-500/10 rounded-2xl shadow-[4px_4px_10px_#bebebe] flex items-center gap-3 animate-fade-in">
-            <span className="text-xs font-bold text-gray-500">当前账户可用算力:</span>
-            <span className="text-sm font-black text-[#9C27B0] bg-[#9C27B0]/5 px-3 py-1 rounded-full">
-              {(Number(user.credits) || 0).toLocaleString()} 字符
-            </span>
-          </div>
-        )}
+        {/* 💡 已成功移除原先的“当前账户可用算力”测试面板，视觉全面对齐极简轻奢风 */}
 
         <div className="text-center mb-10 md:mb-16 max-w-2xl px-2">
           <h1 className="text-3xl md:text-5xl font-black text-gray-900 mb-4 tracking-tight leading-tight">
@@ -266,14 +271,14 @@ export default function PricingPage() {
             <p className="text-[9px] md:text-[10px] text-gray-400 font-medium mb-4 md:mb-6 truncate px-2">单号: {currentOrderNo}</p>
 
             <div className="bg-[#F0F2F5] p-4 md:p-5 rounded-[24px] md:rounded-[32px] inline-block shadow-[inset_5px_5px_10px_#bebebe,inset_-5px_-5px_10px_#ffffff] mb-4 md:mb-6">
-              {currentQrUrl ? (
+              {qrImageUrl ? (
                 <img 
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(currentQrUrl)}`}
+                  src={qrImageUrl}
                   alt="微信支付二维码"
-                  className="w-40 h-40 md:w-48 md:h-48 rounded-2xl bg-white p-2 border border-purple-500/10 shadow-sm"
+                  className="w-40 h-40 md:w-48 md:h-48 rounded-2xl bg-white p-2 border border-purple-500/10 shadow-sm animate-in fade-in duration-200"
                 />
               ) : (
-                <div className="w-40 h-40 md:w-48 md:h-48 flex items-center justify-center text-xs text-red-500">二维码加载失败</div>
+                <div className="w-40 h-40 md:w-48 md:h-48 flex items-center justify-center text-xs text-gray-400">正在绘制收银台...</div>
               )}
             </div>
 
