@@ -1,17 +1,21 @@
-// @ts-ignore
-import { setGlobalDispatcher, ProxyAgent } from "undici";
 import NextAuth from "next-auth";
 import Email from "next-auth/providers/resend"; // 确保这里是你目前使用的邮箱服务
 import { neon } from '@neondatabase/serverless';
 
-// 1. 保留开发环境代理（仅在本地开发时生效）
+// 💡 核心修复：把顶部的 import 删掉，改成运行时动态按需加载（防止打包阶段引发 path 报错）
 if (process.env.NODE_ENV === "development") {
-  const dispatcher = new ProxyAgent("http://127.0.0.1:7890");
-  setGlobalDispatcher(dispatcher);
+  try {
+    // 只有本地开发跑起来时，才去加载这个代理模块
+    const { setGlobalDispatcher, ProxyAgent } = require("undici");
+    const dispatcher = new ProxyAgent("http://127.0.0.1:7890");
+    setGlobalDispatcher(dispatcher);
+    console.log("[Auth] 成功在本地开发环境注入网络代理");
+  } catch (e) {
+    console.warn("[Auth] 本地代理注入失败:", e);
+  }
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  // 2. 核心：只保留 Email 提供者，删掉 Google 和 GitHub
   providers: [
     Email({
       from: "no-reply@yourdomain.com", // 请确保与你的发信域名一致
@@ -59,14 +63,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             token.credits = dbUsers[0].credits;
             token.role = dbUsers[0].role;
             token.name = dbUsers[0].name;
-            token.picture = dbUsers[0].image; // 即使是邮箱登录，也可以显示数据库存的头像
+            token.picture = dbUsers[0].image; 
           }
         } catch (error) {
           console.error("[JWT] 数据同步失败:", error);
         }
       }
 
-      // 响应前端 update() 调用（例如配音扣分后同步）
+      // 响应前端 update() 调用
       if (trigger === "update" && session?.user) {
         return { ...token, ...session.user };
       }
