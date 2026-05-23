@@ -55,6 +55,7 @@ export default function Navbar() {
     { name: '声音复刻', path: '/clone', emoji: '🧬', disabled: true }, 
     { name: '更新日志', path: '/changelog', emoji: '🚀' },
     { name: '定价模式', path: '/pricing', emoji: '💎' },
+    { name: '博客', path: '/blog', emoji: '📝' },
   ];
 
   return (
