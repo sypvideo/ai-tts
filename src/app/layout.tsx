@@ -2,9 +2,6 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import Navbar from "../components/Navbar";
-import Announcement from "../components/Announcement";
-
-// 引入统一后的商业化页尾组件
 import Footer from "../components/Footer";
 
 import "./globals.css";
@@ -12,7 +9,7 @@ import "./globals.css";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
- });
+});
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
@@ -21,7 +18,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "AI 配音助手 Pro - 免费的文字转语音工具",
-  description: "基于 Seed-TTS 2.0 的商业级配音平台，支持情感标签注入与 3D 拟态 UI。",
+  description: "基于 Seed-TTS 2.0 的商业级配音平台，支持情感标签。",
 };
 
 export default function RootLayout({
@@ -42,20 +39,17 @@ export default function RootLayout({
         <div className="pt-20 flex flex-col min-h-screen relative z-10 justify-between">
           
           <div className="flex flex-col flex-1">
-            {/* 3. 运行公告栏 */}
-            <Announcement />
-
-            {/* 4. 页面主体内容 */}
+            {/* 页面主体内容 */}
             <main className="flex-1 flex flex-col">
               {children}
             </main>
           </div>
 
-          {/* 5. 挂载融合了统计功能的页尾 */}
+          {/* 3. 挂载融合了统计功能的页尾 */}
           <Footer />
         </div>
 
-        {/* 6. 统计脚本 - 放在全局最底部静默运行，不干扰 UI 渲染 */}
+        {/* 4. 统计脚本 - 放在全局最底部静默运行 */}
         <Script 
           src="https://stats.buqiuren.com/script.js" 
           strategy="afterInteractive" 
